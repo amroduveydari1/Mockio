@@ -1,8 +1,8 @@
 import { type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
 
-export async function proxy(request: NextRequest) {
-  return await updateSession(request);
+
+  // Middleware removed: no-op proxy
+  return new Response("Middleware removed.", { status: 200 });
 }
 
 export const config = {
