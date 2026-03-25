@@ -56,7 +56,8 @@ CREATE TABLE public.mockup_templates (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   category_id UUID REFERENCES public.mockup_categories(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
-  preview_url TEXT NOT NULL,
+  preview_url TEXT,
+  asset_url TEXT,
   template_data JSONB,
   is_premium BOOLEAN DEFAULT false,
   is_active BOOLEAN DEFAULT true,
@@ -73,6 +74,7 @@ CREATE TABLE public.generated_mockups (
   result_url TEXT NOT NULL,
   result_path TEXT NOT NULL,
   thumbnail_url TEXT,
+  downloads INTEGER DEFAULT 0,
   metadata JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

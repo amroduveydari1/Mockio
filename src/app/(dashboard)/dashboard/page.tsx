@@ -6,22 +6,10 @@ import {
   TrendingUp,
   ArrowRight,
   Plus,
+  Sparkles,
 } from "lucide-react";
 import { Button, Card, CardContent, Badge } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
-
-// Mock data for demonstration
-const recentMockups = [
-  { id: "1", name: "Business Card Mockup", date: "2 hours ago" },
-  { id: "2", name: "T-Shirt Design", date: "Yesterday" },
-  { id: "3", name: "iPhone Screen", date: "3 days ago" },
-];
-
-const quickStats = [
-  { label: "Mockups Created", value: "24", icon: Image, trend: "+12%" },
-  { label: "Templates Used", value: "8", icon: Grid3X3, trend: "+5%" },
-  { label: "Downloads", value: "156", icon: TrendingUp, trend: "+28%" },
-];
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -30,6 +18,64 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   const firstName = user?.user_metadata?.full_name?.split(" ")[0] || "there";
+
+  // Fetch real stats
+  let mockupsCreated = 0;
+  let templatesUsed = 0;
+  let downloads = 0;
+  let recentMockups: Array<{ id: string; name: string; created_at: string }> = [];
+
+  if (user) {
+    // Count mockups created
+    const { count: mockupsCount } = await supabase
+      .from("generated_mockups")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    mockupsCreated = typeof mockupsCount === "number" ? mockupsCount : 0;
+
+    // Count unique templates used
+    const { data: templatesUsedRows } = await supabase
+      .from("generated_mockups")
+      .select("template_id")
+      .eq("user_id", user.id);
+    templatesUsed = templatesUsedRows
+      ? new Set(templatesUsedRows.map((row: any) => row.template_id)).size
+      : 0;
+
+    // Sum downloads (if field exists)
+    const { data: downloadsRows } = await supabase
+      .from("generated_mockups")
+      .select("downloads")
+      .eq("user_id", user.id);
+    downloads = downloadsRows
+      ? downloadsRows.reduce((sum: number, row: any) => sum + (row.downloads || 0), 0)
+      : 0;
+
+    // Fetch recent mockups (latest 5)
+    const { data: recentRows } = await supabase
+      .from("generated_mockups")
+      .select("id, template_id, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    // Optionally join with template name
+    if (recentRows && recentRows.length > 0) {
+      // Fetch template names in batch
+      const templateIds = recentRows.map((row: any) => row.template_id);
+      const { data: templateRows } = await supabase
+        .from("mockup_templates")
+        .select("id, name")
+        .in("id", templateIds);
+      const templateMap = new Map(
+        (templateRows || []).map((t: any) => [t.id, t.name])
+      );
+      recentMockups = recentRows.map((row: any) => ({
+        id: row.id,
+        name: templateMap.get(row.template_id) || "Mockup",
+        created_at: row.created_at,
+      }));
+    }
+  }
 
   return (
     <div className="p-6 lg:p-8">
@@ -42,6 +88,42 @@ export default async function DashboardPage() {
           Here&apos;s what&apos;s happening with your mockups.
         </p>
       </div>
+
+      {/* Generate Brand Set CTA */}
+      <Link href="/generate">
+        <Card
+          variant="bordered"
+          className="p-6 mb-8 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all cursor-pointer group relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-2xl bg-zinc-900 dark:bg-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Sparkles
+                  size={24}
+                  className="text-white dark:text-zinc-900"
+                />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="font-semibold text-lg text-neutral-900 dark:text-white">
+                    Generate Brand Set™
+                  </h3>
+                  <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                    New
+                  </span>
+                </div>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  One logo → complete brand presentation across packaging, cards, screens & signage
+                </p>
+              </div>
+            </div>
+            <ArrowRight
+              size={20}
+              className="text-neutral-400 group-hover:translate-x-1 transition-transform"
+            />
+          </div>
+        </Card>
+      </Link>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -120,28 +202,45 @@ export default async function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {quickStats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.label} variant="bordered" className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
-                  <Icon
-                    size={20}
-                    className="text-neutral-700 dark:text-neutral-300"
-                  />
-                </div>
-                <Badge variant="success">{stat.trend}</Badge>
-              </div>
-              <p className="text-2xl font-bold text-neutral-900 dark:text-white">
-                {stat.value}
-              </p>
-              <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-                {stat.label}
-              </p>
-            </Card>
-          );
-        })}
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+              <Image size={20} className="text-neutral-700 dark:text-neutral-300" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+            {mockupsCreated}
+          </p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+            Mockups Created
+          </p>
+        </Card>
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+              <Grid3X3 size={20} className="text-neutral-700 dark:text-neutral-300" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+            {templatesUsed}
+          </p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+            Templates Used
+          </p>
+        </Card>
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+              <TrendingUp size={20} className="text-neutral-700 dark:text-neutral-300" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+            {downloads}
+          </p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+            Downloads
+          </p>
+        </Card>
       </div>
 
       {/* Recent Mockups */}
@@ -176,7 +275,7 @@ export default async function DashboardPage() {
                       <p className="font-medium text-neutral-900 dark:text-white">
                         {mockup.name}
                       </p>
-                      <p className="text-sm text-neutral-500">{mockup.date}</p>
+                      <p className="text-sm text-neutral-500">{new Date(mockup.created_at).toLocaleString()}</p>
                     </div>
                   </div>
                   <Button variant="ghost" size="sm">

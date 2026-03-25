@@ -10,6 +10,8 @@ import {
   Settings,
   Menu,
   X,
+  SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -18,9 +20,11 @@ import { LogoutButton } from "@/components/logout-button";
 
 const sidebarLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/generate", label: "Brand Set", icon: Sparkles },
   { href: "/upload", label: "Upload Logo", icon: Upload },
   { href: "/mockups", label: "Mockup Library", icon: Grid3X3 },
   { href: "/generated", label: "My Mockups", icon: Image },
+  { href: "/template-editor", label: "Template Editor", icon: SlidersHorizontal },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

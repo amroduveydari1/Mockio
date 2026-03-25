@@ -19,7 +19,8 @@ import { createClient } from "@/lib/supabase/client";
 
 const PLACEHOLDER_IMAGE = "/images/mockup-placeholder.png";
 function getPreviewUrl(template: MockupTemplateConfig) {
-  return template.thumbnailUrl || template.baseImageUrl || PLACEHOLDER_IMAGE;
+  // Prefer preview_url, fallback to asset_url, then placeholder
+  return template.preview_url || template.asset_url || PLACEHOLDER_IMAGE;
 }
 
 function SafeImageWithSkeleton({
@@ -69,6 +70,8 @@ export default function MockupsPage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   // Added missing state for user stats and new user flag
   const [isNewUser, setIsNewUser] = useState<boolean | null>(null);
   const [userStats, setUserStats] = useState<{ mockupsCreated: number; templatesUsed: number; downloads: number }>({ mockupsCreated: 0, templatesUsed: 0, downloads: 0 });
@@ -77,27 +80,39 @@ export default function MockupsPage() {
   useEffect(() => {
     async function fetchCategories() {
       setIsLoadingCategories(true);
-      setError(null);
+      setCategoryError(null);
       try {
         const result = await getMockupCategories();
-        if (result.error) throw new Error(result.error);
-        // Map and filter categories with at least one template
-        const dbCategories = (result.categories || []).map((cat: any) => ({
-          id: cat.id,
-          name: cat.name,
-          slug: cat.slug,
-          icon: cat.icon,
-          sort_order: cat.sort_order,
-          templateCount: cat.mockup_templates?.[0]?.count || 0
-        })).filter((cat: any) => cat.templateCount > 0);
+        console.log("[DEBUG] getMockupCategories raw result:", JSON.stringify(result, null, 2));
+        if (result.error) {
+          console.error("[DEBUG] Categories fetch error:", result.error);
+          setCategoryError(result.error);
+          setCategories([]);
+          return;
+        }
+        console.log("[DEBUG] Categories data:", result.categories);
+        console.log("[DEBUG] Categories count:", result.categories?.length ?? 0);
+        // Map all categories, include those with zero templates
+        const dbCategories = (result.categories || []).map((cat: any) => {
+          console.log(`[DEBUG] Category "${cat.name}" raw mockup_templates:`, cat.mockup_templates);
+          return {
+            id: cat.id,
+            name: cat.name,
+            slug: cat.slug,
+            icon: cat.icon,
+            sort_order: cat.sort_order,
+            templateCount: cat.mockup_templates?.[0]?.count || 0
+          };
+        });
+        console.log("[DEBUG] Final categoriesWithCounts:", dbCategories);
         setCategories(dbCategories);
         // Auto-select first category if none selected
         if (!activeCategory && dbCategories.length > 0) {
           setActiveCategory(dbCategories[0].id);
         }
-        console.log("Loaded categories:", dbCategories);
       } catch (err: any) {
-        setError(err.message);
+        console.error("[DEBUG] Categories fetch exception:", err);
+        setCategoryError(err.message);
         setCategories([]);
       } finally {
         setIsLoadingCategories(false);
@@ -115,26 +130,34 @@ export default function MockupsPage() {
         return;
       }
       setIsLoadingTemplates(true);
-      setError(null);
+      setTemplateError(null);
       try {
-        console.log("Selected category ID:", activeCategory);
+        console.log("[DEBUG] Fetching templates for category_id:", activeCategory);
         const result = await getMockupTemplates(activeCategory);
-        if (result.error) throw new Error(result.error);
-        console.log("Templates query result:", result.templates);
+        console.log("[DEBUG] getMockupTemplates raw result:", JSON.stringify(result, null, 2));
+        if (result.error) {
+          console.error("[DEBUG] Templates fetch error:", result.error);
+          setTemplateError(result.error);
+          setTemplates([]);
+          return;
+        }
+        console.log("[DEBUG] Templates data:", result.templates);
+        console.log("[DEBUG] Templates count:", result.templates?.length ?? 0);
+        // Map templates to new type with preview_url, asset_url, template_data
         const mapped = (result.templates || []).map((t: any) => ({
           id: t.id,
           name: t.name,
-          category: t.category_id, // store category_id for matching
-          baseImageUrl: t.base_image_url || t.preview_url || "",
-          thumbnailUrl: t.thumbnail_url || t.preview_url || t.base_image_url || "",
-          logoPlacement: t.logo_placement || {},
-          outputWidth: t.output_width || 800,
-          outputHeight: t.output_height || 600,
-          isPremium: t.is_premium || false
+          category_id: t.category_id,
+          preview_url: t.preview_url ?? null,
+          asset_url: t.asset_url ?? null,
+          template_data: t.template_data ?? null,
+          is_premium: t.is_premium ?? false,
+          created_at: t.created_at,
         }));
         setTemplates(mapped);
       } catch (err: any) {
-        setError(err.message);
+        console.error("[DEBUG] Templates fetch exception:", err);
+        setTemplateError(err.message);
         setTemplates([]);
       } finally {
         setIsLoadingTemplates(false);
@@ -302,7 +325,7 @@ export default function MockupsPage() {
               <div className="flex-1 flex flex-col gap-4 items-center md:items-start justify-center">
                 <h2 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">{selectedTemplate.name}</h2>
                 <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-4">
-                  {categories.find((cat) => cat.slug === selectedTemplate.category)?.name || selectedTemplate.category}
+                  {categories.find((cat) => cat.id === selectedTemplate.category_id)?.name || "Unknown category"}
                 </p>
                 <Button
                   size="lg"
@@ -329,6 +352,18 @@ export default function MockupsPage() {
               />
             </div>
           </div>
+          {/* Category Error Banner */}
+          {categoryError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+              <strong>Category fetch error:</strong> {categoryError}
+            </div>
+          )}
+          {/* Template Error Banner */}
+          {templateError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+              <strong>Template fetch error:</strong> {templateError}
+            </div>
+          )}
           {/* Category Pills */}
           <div className="flex flex-wrap gap-2 mb-8">
             {isLoadingCategories ? (
@@ -336,29 +371,47 @@ export default function MockupsPage() {
             ) : categories.length === 0 ? (
               <span className="text-zinc-400">No categories found.</span>
             ) : (
-              categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setActiveCategory(category.id)}
-                  className={cn(
-                    "px-4 py-2 rounded-full text-sm font-medium transition-all duration-200",
-                    activeCategory === category.id
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                  )}
-                >
-                  {category.name} <span className="ml-2 text-xs text-zinc-400">({category.templateCount})</span>
-                </button>
-              ))
+              categories.map((category) => {
+                const isDisabled = category.templateCount === 0;
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => !isDisabled && setActiveCategory(category.id)}
+                    className={cn(
+                      "px-4 py-2 rounded-full text-sm font-medium transition-all duration-200",
+                      isDisabled
+                        ? "bg-zinc-100 text-zinc-400 cursor-not-allowed opacity-60 dark:bg-zinc-800 dark:text-zinc-700"
+                        : activeCategory === category.id
+                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                    )}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
+                  >
+                    {category.name} <span className="ml-2 text-xs text-zinc-400">({category.templateCount})</span>
+                  </button>
+                );
+              })
             )}
           </div>
           {/* Results count */}
           <p className="text-sm text-zinc-500 mb-6">
-            {isLoadingTemplates ? "Loading templates..." : error ? `Error: ${error}` : `${filteredTemplates.length} mockup${filteredTemplates.length !== 1 ? "s" : ""}`}
+            {isLoadingTemplates
+              ? "Loading templates..."
+              : error
+              ? `Error: ${error}`
+              : categories.find((cat) => cat.id === activeCategory)?.templateCount === 0
+              ? "No templates in this category yet."
+              : `${filteredTemplates.length} mockup${filteredTemplates.length !== 1 ? "s" : ""}`}
           </p>
           {/* Mockups Grid */}
           <div className={cn("grid gap-8", "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4")}> 
-            {filteredTemplates.length === 0 ? (
+            {categories.find((cat) => cat.id === activeCategory)?.templateCount === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-24 text-zinc-400">
+                <span className="text-2xl mb-2">Coming soon</span>
+                <span className="text-base">Templates for this category are coming soon. Check back later!</span>
+              </div>
+            ) : filteredTemplates.length === 0 ? (
               <div className="col-span-full flex flex-col items-center justify-center py-24 text-zinc-400">
                 <span className="text-2xl mb-2">No templates found</span>
                 <span className="text-base">Try a different category.</span>
@@ -409,7 +462,7 @@ function TemplateCard({ template, selected, onSelect, categories }: { template: 
         )}
       </div>
       <div className="absolute top-3 right-3 z-10">
-        {template.isPremium && (
+        {template.is_premium && (
           <Badge className="rounded-full px-2 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white flex items-center gap-1 shadow">
             <Sparkles size={14} className="mr-1" /> Pro
           </Badge>
@@ -427,7 +480,7 @@ function TemplateCard({ template, selected, onSelect, categories }: { template: 
         <div className="bg-gradient-to-t from-black/80 via-black/30 to-transparent px-4 pt-10 pb-3 min-h-[64px]">
           <div className="font-semibold text-white text-base drop-shadow">{template.name}</div>
           <div className="text-zinc-200 text-xs mt-0.5">
-            {categories.find((cat) => cat.slug === template.category)?.name || template.category}
+            {categories.find((cat) => cat.id === template.category_id)?.name || "Unknown category"}
           </div>
         </div>
       </div>

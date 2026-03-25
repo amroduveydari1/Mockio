@@ -1,21 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { FileUpload } from "@/components";
-import { uploadLogo, getMockupTemplates, generateMockup } from "@/lib/actions/mockups";
+import { uploadLogo, getMockupTemplates, getMockupCategories, generateMockup } from "@/lib/actions/mockups";
 
-// Mock categories for template selection
-const categories = [
-  { id: "business-cards", name: "Business Cards", count: 24 },
-  { id: "signage", name: "Signage", count: 18 },
-  { id: "apparel", name: "Apparel", count: 32 },
-  { id: "packaging", name: "Packaging", count: 16 },
-  { id: "digital", name: "Digital Screens", count: 28 },
-  { id: "stationery", name: "Stationery", count: 20 },
-];
+interface Category {
+  id: string;
+  name: string;
+  templateCount: number;
+}
 
 export default function UploadPage() {
   const router = useRouter();
@@ -26,6 +22,49 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadedLogoId, setUploadedLogoId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // Fetch real categories from Supabase when entering step 2
+  useEffect(() => {
+    if (step !== 2) return;
+    async function fetchCategories() {
+      setIsLoadingCategories(true);
+      setCategoryError(null);
+      try {
+        const result = await getMockupCategories();
+        console.log("[DEBUG upload] getMockupCategories raw result:", JSON.stringify(result, null, 2));
+        if (result.error) {
+          console.error("[DEBUG upload] Categories fetch error:", result.error);
+          setCategoryError(result.error);
+          setCategories([]);
+          return;
+        }
+        console.log("[DEBUG upload] Categories data:", result.categories);
+        console.log("[DEBUG upload] Categories count:", result.categories?.length ?? 0);
+        const mapped = (result.categories || []).map((cat: any) => {
+          console.log(`[DEBUG upload] Category "${cat.name}" raw mockup_templates:`, cat.mockup_templates);
+          return {
+            id: cat.id,
+            name: cat.name,
+            templateCount: cat.mockup_templates?.[0]?.count || 0,
+          };
+        });
+        console.log("[DEBUG upload] Final categoriesWithCounts:", mapped);
+        setCategories(mapped);
+      } catch (err: any) {
+        console.error("[DEBUG upload] Categories fetch exception:", err);
+        setCategoryError(err.message || "Unknown error loading categories");
+        setCategories([]);
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    }
+    fetchCategories();
+  }, [step]);
 
   const handleFileSelect = (file: File) => {
     setLogoFile(file);
@@ -74,17 +113,45 @@ export default function UploadPage() {
 
   const handleNextStep = async () => {
     if (step === 2 && selectedCategory && uploadedLogoId) {
-      // Fetch first template for the selected category
-      const result = await getMockupTemplates(selectedCategory);
-      if (result.templates && result.templates.length > 0) {
+      setIsGenerating(true);
+      setGenerateError(null);
+      try {
+        // Fetch first template for the selected category
+        console.log("[upload] Fetching templates for category:", selectedCategory);
+        const result = await getMockupTemplates(selectedCategory);
+        if (result.error) {
+          console.error("[upload] Template fetch error:", result.error);
+          setGenerateError(`Failed to load templates: ${result.error}`);
+          return;
+        }
+        if (!result.templates || result.templates.length === 0) {
+          setGenerateError("No templates found for this category yet.");
+          return;
+        }
         const template = result.templates[0];
-        // Generate mockup
-        await generateMockup(uploadedLogoId, template.id, logoName || "My Mockup");
-        // Redirect to dashboard or mockups page
-        router.push("/dashboard");
-      } else {
-        // No template found for this category
-        alert("No template found for this category. Please contact support.");
+        console.log("[upload] Generating mockup with template:", template.id, template.name);
+
+        // Generate mockup (server-side rendering pipeline)
+        const genResult = await generateMockup(
+          uploadedLogoId,
+          template.id,
+          logoName || "My Mockup"
+        );
+        console.log("[upload] generateMockup result:", genResult);
+
+        if (genResult.error) {
+          console.error("[upload] Generation error:", genResult.error);
+          setGenerateError(genResult.error);
+          return;
+        }
+
+        // Success — redirect to generated mockups page
+        router.push("/generated");
+      } catch (err: any) {
+        console.error("[upload] Unexpected error:", err);
+        setGenerateError(err.message || "An unexpected error occurred during generation.");
+      } finally {
+        setIsGenerating(false);
       }
     }
   };
@@ -210,29 +277,46 @@ export default function UploadPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
-                className={`p-6 rounded-2xl border text-left transition-all ${
-                  selectedCategory === category.id
-                    ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
-                    : "border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
-                }`}
-              >
-                <div className="w-12 h-12 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mb-4">
-                  <span className="text-lg font-bold text-neutral-900 dark:text-white">
-                    {category.name.charAt(0)}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-neutral-900 dark:text-white">
-                  {category.name}
-                </h3>
-                <p className="text-sm text-neutral-500 mt-1">
-                  {category.count} templates
-                </p>
-              </button>
-            ))}
+            {categoryError && (
+              <div className="col-span-full mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+                <strong>Category fetch error:</strong> {categoryError}
+              </div>
+            )}
+            {isLoadingCategories ? (
+              <p className="col-span-full text-center text-neutral-500 py-8">Loading categories...</p>
+            ) : categories.length === 0 ? (
+              <p className="col-span-full text-center text-neutral-500 py-8">No categories available yet.</p>
+            ) : (
+              categories.map((category) => {
+                const isDisabled = category.templateCount === 0;
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => !isDisabled && setSelectedCategory(category.id)}
+                    disabled={isDisabled}
+                    className={`p-6 rounded-2xl border text-left transition-all ${
+                      isDisabled
+                        ? "border-neutral-200 dark:border-neutral-800 opacity-50 cursor-not-allowed"
+                        : selectedCategory === category.id
+                        ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
+                        : "border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+                    }`}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mb-4">
+                      <span className="text-lg font-bold text-neutral-900 dark:text-white">
+                        {category.name.charAt(0)}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-neutral-900 dark:text-white">
+                      {category.name}
+                    </h3>
+                    <p className="text-sm text-neutral-500 mt-1">
+                      {isDisabled ? "Coming soon" : `${category.templateCount} templates`}
+                    </p>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -266,10 +350,29 @@ export default function UploadPage() {
             )}
           </Button>
         ) : (
-          <Button onClick={handleNextStep} disabled={!selectedCategory}>
-            Generate Mockup
-            <ArrowRight size={18} />
-          </Button>
+          <>
+            {generateError && (
+              <div className="w-full mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+                <strong>Generation failed:</strong> {generateError}
+              </div>
+            )}
+            <Button
+              onClick={handleNextStep}
+              disabled={!selectedCategory || isGenerating}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Generating mockup...
+                </>
+              ) : (
+                <>
+                  Generate Mockup
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </Button>
+          </>
         )}
       </div>
     </div>

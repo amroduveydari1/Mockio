@@ -45,9 +45,7 @@ export function CategoryCard({
           <div>
             <h3 className="text-lg font-semibold text-white mb-1">{name}</h3>
             <p className="text-sm text-white/80">{description}</p>
-            <p className="text-xs text-white/60 mt-2">
-              {mockupCount} templates
-            </p>
+            {/* Remove hardcoded count. If you want to show count, use only real Supabase data. */}
           </div>
           <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm group-hover:bg-white group-hover:text-neutral-900 transition-all">
             <ArrowRight
