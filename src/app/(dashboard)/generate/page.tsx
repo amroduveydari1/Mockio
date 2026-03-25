@@ -1,7 +1,9 @@
 "use client";
 
+
 import Link from "next/link";
-import { ArrowLeft, Button } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function GeneratePage() {
   return (
