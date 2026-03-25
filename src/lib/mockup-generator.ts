@@ -5,7 +5,7 @@
  * TODO: Integrate with real template images and logic.
  */
 
-import { MockupTemplateConfig, LogoPlacement } from "./mockup-templates";
+import { MockupTemplateConfig, LogoPlacement } from "./types/mockup-template";
 
 export interface GenerationOptions {
   // Override template defaults
