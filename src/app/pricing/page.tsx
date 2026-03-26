@@ -38,7 +38,7 @@ const pricingPlans = [
   },
   {
     name: "Enterprise",
-    price: 49,
+    price: 29,
     period: "month",
     description: "For teams and agencies",
     features: [

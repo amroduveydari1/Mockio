@@ -12,11 +12,14 @@ import {
   X,
   SlidersHorizontal,
   Sparkles,
+  ImagePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Avatar } from "@/components/ui";
 import { LogoutButton } from "@/components/logout-button";
+
+const ADMIN_EMAIL = "amrdwedari1@gmail.com";
 
 const sidebarLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -25,6 +28,7 @@ const sidebarLinks = [
   { href: "/mockups", label: "Mockup Library", icon: Grid3X3 },
   { href: "/generated", label: "My Mockups", icon: Image },
   { href: "/template-editor", label: "Template Editor", icon: SlidersHorizontal },
+  { href: "/admin", label: "Admin Panel", icon: ImagePlus, adminOnly: true },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -90,7 +94,9 @@ export function Sidebar({ user }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <ul className="space-y-0.5">
-            {sidebarLinks.map((link) => {
+            {sidebarLinks
+              .filter((link) => !link.adminOnly || user?.email === ADMIN_EMAIL)
+              .map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
 
