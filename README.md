@@ -1,6 +1,10 @@
 # Mockio - Professional Logo Mockup Generator
 
-A modern SaaS web application for generating professional logo mockups. Built with Next.js 15, TypeScript, Tailwind CSS, and Supabase.
+A modern SaaS web application for generating professional logo mockups. Built with Next.js, TypeScript, Tailwind CSS, and Supabase.
+
+## Engineering review status
+
+Documentation and deployment claims need verification. Before production: review Supabase RLS, storage ownership rules, file validation (especially SVG), authentication callbacks, and server-enforced premium access. Keep privileged credentials server-side. `package.json` currently specifies Next.js 16.
 
 ## Features
 
@@ -79,7 +83,7 @@ src/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/mockio.git
+git clone https://github.com/amroduveydari1/Mockio.git
 cd mockio
 ```
 
